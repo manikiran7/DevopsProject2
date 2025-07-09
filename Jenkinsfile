@@ -66,48 +66,54 @@ pipeline {
                     string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
-                    sh """
-                        export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-                        aws ecr describe-repositories --repository-names ${params.ECR_REPO_NAME} --region us-east-1 || \
-                        aws ecr create-repository --repository-name ${params.ECR_REPO_NAME} --region us-east-1
-                    """
+                    sh '''
+                        mkdir -p ~/.aws
+
+                        cat > ~/.aws/credentials <<EOF
+[default]
+aws_access_key_id=${AWS_ACCESS_KEY_ID}
+aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
+EOF
+
+                        cat > ~/.aws/config <<EOF
+[default]
+region=us-east-1
+output=json
+EOF
+
+                        aws sts get-caller-identity
+                        aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region us-east-1 || \
+                        aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region us-east-1
+                    '''
                 }
             }
         }
 
         stage('ECR Login & Tag Image') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
-                    sh """
-                        export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-                        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-                        docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
-                        docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
-                    """
-                }
+                sh '''
+                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+                    docker tag ${ECR_REPO_NAME} ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                    docker tag ${ECR_REPO_NAME} ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest
+                '''
             }
         }
 
         stage('Push Image to ECR') {
             steps {
-                sh """
-                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
-                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
-                """
+                sh '''
+                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest
+                '''
             }
         }
 
         stage('Cleanup Local Images') {
             steps {
-                sh """
-                    docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER} || true
-                    docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest || true
-                """
+                sh '''
+                    docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER} || true
+                    docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest || true
+                '''
             }
         }
     }
