@@ -66,7 +66,7 @@ pipeline {
                     string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
-                    sh '''
+                    sh """
                         mkdir -p ~/.aws
 
                         cat > ~/.aws/credentials <<EOF
@@ -84,7 +84,7 @@ EOF
                         aws sts get-caller-identity
                         aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region us-east-1 || \
                         aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region us-east-1
-                    '''
+                    """
                 }
             }
         }
