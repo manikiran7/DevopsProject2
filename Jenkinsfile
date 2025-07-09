@@ -1,119 +1,110 @@
 pipeline {
     agent any
-
+    
     parameters {
-        string(name: 'ECR_REPO_NAME', defaultValue: 'amazon-prime', description: 'Enter the ECR repository name')
-        string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'Enter your AWS Account ID')
+        string(name: 'ECR_REPO_NAME', defaultValue: 'amazon-prime', description: 'Enter repository name')
+        string(name: 'AWS_ACCOUNT_ID', defaultValue: '123456789012', description: 'Enter AWS Account ID') // Added missing quote
     }
-
+    
     tools {
         nodejs 'node24'
         jdk 'Java21'
     }
-
+    
     environment {
         SCANNER_HOME = tool 'SonarScanner'
     }
-
+    
     stages {
-        stage('Checkout') {
+        stage('1. Git Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/manikiran7/DevopsProject2.git'
             }
         }
-
-        stage('SonarQube Analysis') {
+        
+        stage('2. SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('mysonarqube') {
+                withSonarQubeEnv ('mysonarqube') {
                     sh """
-                        ${SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectName=amazon-prime \
-                        -Dsonar.projectKey=amazon-prime
+                    $SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectName=amazon-prime \
+                    -Dsonar.projectKey=amazon-prime
                     """
                 }
             }
         }
-
-        stage('Quality Gate') {
+        
+        stage('3. Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
-                }
+                waitForQualityGate abortPipeline: false, 
+                credentialsId: 'sonar-token'
             }
         }
-
-        stage('NPM Install') {
+        
+        stage('4. Install npm') {
             steps {
-                sh 'npm install'
+                sh "npm install"
             }
         }
-
-        stage('Trivy Scan') {
+        
+        stage('5. Trivy Scan') {
             steps {
-                sh 'trivy fs . > trivy-scan-result.txt'
+                sh "trivy fs . > trivy.txt"
             }
         }
-
-        stage('Docker Image Build') {
+        
+        stage('6. Build Docker Image') {
             steps {
                 sh "docker build -t ${params.ECR_REPO_NAME} ."
             }
         }
-
-        stage('Create ECR Repository') {
+        
+        stage('7. Create ECR repo') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY'), 
+                                 string(credentialsId: 'secret-key', variable: 'AWS_SECRET_KEY')]) {
                     sh """
-                        mkdir -p ~/.aws
-
-                        cat > ~/.aws/credentials <<EOF
-[default]
-aws_access_key_id=${AWS_ACCESS_KEY_ID}
-aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
-EOF
-
-                        cat > ~/.aws/config <<EOF
-[default]
-region=us-east-1
-output=json
-EOF
-
-                        aws sts get-caller-identity
-                        aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region us-east-1 || \
-                        aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region us-east-1
+                    aws configure set aws_access_key_id $AWS_ACCESS_KEY
+                    aws configure set aws_secret_access_key $AWS_SECRET_KEY
+                    aws ecr describe-repositories --repository-names ${params.ECR_REPO_NAME} --region us-east-1 || \
+                    aws ecr create-repository --repository-name ${params.ECR_REPO_NAME} --region us-east-1
                     """
                 }
             }
         }
-
-        stage('ECR Login & Tag Image') {
+        
+        stage('8. Login to ECR & tag image') {
             steps {
-                sh '''
-                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-                    docker tag ${ECR_REPO_NAME} ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
-                    docker tag ${ECR_REPO_NAME} ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest
-                '''
+                withCredentials([string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY'), 
+                                 string(credentialsId: 'secret-key', variable: 'AWS_SECRET_KEY')]) {
+                    sh """
+                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+                    docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
+                    docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
+                    """
+                }
             }
         }
-
-        stage('Push Image to ECR') {
+        
+        stage('9. Push image to ECR') {
             steps {
-                sh '''
-                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
-                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest
-                '''
+                withCredentials([string(credentialsId: 'access-key', variable: 'AWS_ACCESS_KEY'), 
+                                 string(credentialsId: 'secret-key', variable: 'AWS_SECRET_KEY')]) {
+                    sh """
+                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
+                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
+                    """
+                }
             }
         }
-
-        stage('Cleanup Local Images') {
+        
+        stage('10. Cleanup Images') {
             steps {
-                sh '''
-                    docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER} || true
-                    docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${ECR_REPO_NAME}:latest || true
-                '''
+                sh """
+                docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
+                docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
+        docker images
+                """
             }
         }
     }
