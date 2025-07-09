@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    parameters {
-        string(name: 'ECR_REPO_NAME', defaultValue: 'amazon-prime', description: 'Enter repository name')
-        string(name: 'AWS_ACCOUNT_ID', defaultValue: '123456789012', description: 'Enter AWS Account ID')
-    }
-
     tools {
         nodejs 'node24'
         jdk 'Java21'
@@ -13,6 +8,10 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'SonarScanner'
+        AWS_ACCOUNT_ID = '231778609415'
+        ECR_REPO_NAME = 'manikiran/amazonprime'
+        AWS_REGION = 'us-east-1'
+        ECR_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}"
     }
 
     stages {
@@ -54,15 +53,15 @@ pipeline {
 
         stage('6. Build Docker Image') {
             steps {
-                sh "docker build -t ${params.ECR_REPO_NAME} ."
+                sh "docker build -t ${ECR_REPO_NAME} ."
             }
         }
 
         stage('7. Create ECR Repo') {
             steps {
                 sh """
-                    aws ecr describe-repositories --repository-names ${params.ECR_REPO_NAME} --region us-east-1 || \
-                    aws ecr create-repository --repository-name ${params.ECR_REPO_NAME} --region us-east-1
+                    aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region ${AWS_REGION} || \
+                    aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region ${AWS_REGION}
                 """
             }
         }
@@ -70,9 +69,9 @@ pipeline {
         stage('8. Login to ECR & Tag Image') {
             steps {
                 sh """
-                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-                    docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
-                    docker tag ${params.ECR_REPO_NAME} ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
+                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    docker tag ${ECR_REPO_NAME} ${ECR_URI}:${BUILD_NUMBER}
+                    docker tag ${ECR_REPO_NAME} ${ECR_URI}:latest
                 """
             }
         }
@@ -80,8 +79,8 @@ pipeline {
         stage('9. Push Image to ECR') {
             steps {
                 sh """
-                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER}
-                    docker push ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest
+                    docker push ${ECR_URI}:${BUILD_NUMBER}
+                    docker push ${ECR_URI}:latest
                 """
             }
         }
@@ -89,8 +88,8 @@ pipeline {
         stage('10. Cleanup Images') {
             steps {
                 sh """
-                    docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:${BUILD_NUMBER} || true
-                    docker rmi ${params.AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${params.ECR_REPO_NAME}:latest || true
+                    docker rmi ${ECR_URI}:${BUILD_NUMBER} || true
+                    docker rmi ${ECR_URI}:latest || true
                     docker images
                 """
             }
