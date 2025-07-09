@@ -8,7 +8,7 @@ pipeline {
 
     tools {
         nodejs 'node24'
-        Jdk 'jdk21'
+        jdk 'jdk21'
     }
 
     environment {
