@@ -20,4 +20,5 @@ spec:
         image: 231778609415.dkr.ecr.us-east-1.amazonaws.com/manikiran/amazonprime:latest
         ports:
         - containerPort: 3000
-...
+      imagePullSecrets:
+        - name: ecr-secret
