@@ -1,17 +1,13 @@
----
+# service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: pandacloud-app
-  labels:
-    app: pandacloud-app
+  name: amazonprime-service
+  namespace: manikiran
 spec:
-  ports:
-  - name: http
-    port: 3000
-    protocol: TCP
-    targetPort: 3000
   selector:
-    app: pandacloud-app
-  type: NodePort
-...
+    app: amazonprime
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
