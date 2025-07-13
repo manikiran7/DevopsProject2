@@ -1,24 +1,21 @@
----
+# deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pandacloud-app
-  labels:
-    app: pandacloud-app
+  name: amazonprime
+  namespace: manikiran
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app: pandacloud-app
+      app: amazonprime
   template:
     metadata:
       labels:
-        app: pandacloud-app
+        app: amazonprime
     spec:
       containers:
-      - name: pandacloud-container
-        image: 231778609415.dkr.ecr.us-east-1.amazonaws.com/manikiran/amazonprime:latest
-        ports:
-        - containerPort: 3000
-      imagePullSecrets:
-        - name: ecr-secret
+        - name: amazonprime
+          image: 231778609415.dkr.ecr.us-east-1.amazonaws.com/manikiran/amazonprime:latest
+          ports:
+            - containerPort: 80
